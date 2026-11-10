@@ -1,0 +1,3 @@
+pywebview>=6.0
+pyinstaller>=6.0
+pyobjc-framework-AVFoundation>=13.0

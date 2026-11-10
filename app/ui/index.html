@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALS Collect</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app" id="app" data-state="empty">
+
+  <header class="toolbar">
+    <div class="brand"><span class="brand-name">ALS Collect</span><span class="brand-sub" id="brandSub">Collect All and Save, without Live</span></div>
+    <div class="toolbar-actions">
+      <input class="search" id="search" type="search" placeholder="Filter Sets" spellcheck="false">
+      <button class="btn" id="btnAddSets" title="⌘O">Add Sets…</button>
+      <button class="btn" id="btnAddFolder">Add Folder…</button>
+      <button class="btn ghost" id="btnClear" title="Remove everything from the list">Clear</button>
+    </div>
+  </header>
+
+  <aside class="panel projects" id="projectsPanel">
+    <div class="panel-title">Projects <span class="muted" id="projectsCount"></span></div>
+    <div class="list" id="projectList" tabindex="0" aria-label="Projects and Sets"></div>
+    <div class="panel-foot" id="projectsFoot"><span class="muted">Nothing added yet — drop Sets or folders anywhere.</span></div>
+  </aside>
+
+  <main class="preview" id="preview">
+    <!-- empty state -->
+    <section class="dropzone-wrap" id="emptyState">
+      <div class="dropzone" id="dropzone">
+        <div class="drop-glyph">⤓</div>
+        <div class="drop-title">Drop Live Sets, Project folders<br>or a folder of Projects</div>
+        <div class="drop-sub">…or</div>
+        <div class="drop-actions">
+          <button class="btn" id="btnBrowseSets">Browse Sets…</button>
+          <button class="btn" id="btnBrowseFolder">Browse Folder…</button>
+        </div>
+        <div class="drop-hint">Nothing is written until you press Collect. Previews never touch your files.</div>
+      </div>
+    </section>
+
+    <!-- preview state -->
+    <section class="preview-body" id="previewBody" hidden>
+      <div class="preview-head">
+        <div class="preview-title-row">
+          <div class="preview-title" id="pvTitle">—</div>
+          <div class="preview-actions">
+            <button class="btn ghost small" id="btnReveal" title="Reveal in Finder (⌘R)">Reveal</button>
+            <button class="btn ghost small" id="btnOpenLive" title="Open this Set in Ableton Live">Open in Live</button>
+          </div>
+        </div>
+        <div class="preview-path mono" id="pvPath"></div>
+        <div class="stats" id="pvStats"></div>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-tab="arrangement">Arrangement <span class="count" id="cntArr"></span></button>
+        <button class="tab" data-tab="session">Session <span class="count" id="cntSes"></span></button>
+        <button class="tab" data-tab="tracks">Tracks &amp; Devices <span class="count" id="cntTrk"></span></button>
+        <button class="tab" data-tab="deps">Dependencies <span class="count" id="cntDep"></span></button>
+      </nav>
+      <div class="tabpanes">
+        <div class="pane active" id="pane-arrangement"></div>
+        <div class="pane" id="pane-session"></div>
+        <div class="pane" id="pane-tracks"></div>
+        <div class="pane" id="pane-deps"></div>
+      </div>
+      <div class="player" id="player" hidden>
+        <button class="play" id="playBtn" title="Space">▶</button>
+        <div class="player-meta">
+          <div class="player-name" id="playerName"></div>
+          <div class="player-note" id="playerNote" hidden></div>
+          <div class="player-bar"><div class="player-fill" id="playerFill"></div></div>
+        </div>
+        <div class="player-time mono" id="playerTime">0:00 / 0:00</div>
+        <button class="btn ghost small" id="playerClose" title="Esc">✕</button>
+      </div>
+    </section>
+
+    <!-- loading / error / multi -->
+    <section class="preview-message" id="previewMessage" hidden></section>
+
+    <!-- run state -->
+    <section class="run" id="runView" hidden>
+      <div class="run-head">
+        <div class="run-title" id="runTitle">Collecting…</div>
+        <div class="run-sub" id="runSub"></div>
+        <div class="progress"><div class="progress-fill" id="runFill"></div></div>
+      </div>
+      <pre class="log mono" id="runLog"></pre>
+      <div class="run-results" id="runResults"></div>
+      <div class="run-actions">
+        <button class="btn ghost" id="btnCancel">Cancel</button>
+        <button class="btn" id="btnBackToPreview" hidden>Back to preview</button>
+      </div>
+    </section>
+    <div class="toast" id="toast" hidden></div>
+  </main>
+
+  <aside class="panel collect" id="collectPanel">
+    <div class="panel-title">Collect</div>
+    <div class="panel-scroll">
+      <div class="group">
+        <div class="group-title">Scope</div>
+        <div class="seg" id="segScope">
+          <button data-v="set">This Set</button>
+          <button data-v="project" class="on">Whole Project</button>
+        </div>
+        <div class="hint" id="scopeHint">A Project archive is only complete when all of its Sets are collected.</div>
+      </div>
+      <div class="group">
+        <div class="group-title">Destination</div>
+        <div class="seg" id="segMode">
+          <button data-v="out" class="on">Archive copy</button>
+          <button data-v="in_place">In place</button>
+        </div>
+        <div class="field" id="outField">
+          <input type="text" id="outDir" placeholder="Choose a folder for the archives…" spellcheck="false">
+          <button class="btn small" id="btnChooseOut">Choose…</button>
+        </div>
+        <div class="hint" id="modeHint">A self-contained copy of each Project is built in that folder. Your originals are not touched.</div>
+      </div>
+      <div class="group">
+        <div class="group-title">What to collect</div>
+        <label class="toggle"><input type="checkbox" id="optOther" checked><span class="knob"></span><span class="tl"><b>Files in other Projects</b><i>samples borrowed from another Project folder</i></span></label>
+        <label class="toggle"><input type="checkbox" id="optUser" checked><span class="knob"></span><span class="tl"><b>User Library</b><i>your own presets, racks and samples</i></span></label>
+        <label class="toggle"><input type="checkbox" id="optElse" checked><span class="knob"></span><span class="tl"><b>Elsewhere on disk</b><i>Downloads, sample libraries, external drives…</i></span></label>
+        <label class="toggle"><input type="checkbox" id="optPacks"><span class="knob"></span><span class="tl"><b>Packs &amp; Core Library</b><i>ship with Live — usually not worth the space</i></span></label>
+        <label class="toggle" id="rowBackups"><input type="checkbox" id="optBackups"><span class="knob"></span><span class="tl"><b>Include Backup/ folder</b><i>Live's own old versions of the Sets</i></span></label>
+      </div>
+      <div class="group">
+        <div class="group-title">Find missing files</div>
+        <div class="search-dirs" id="searchDirs"></div>
+        <button class="btn small" id="btnAddSearch">+ Add folder to search…</button>
+        <label class="toggle"><input type="checkbox" id="optSpotlight"><span class="knob"></span><span class="tl"><b>Use Spotlight</b><i>search the whole Mac by file name</i></span></label>
+        <label class="toggle"><input type="checkbox" id="optPickFirst"><span class="knob"></span><span class="tl"><b>Take the first of several matches</b><i>otherwise ambiguous files are left alone</i></span></label>
+      </div>
+    </div>
+    <div class="panel-foot collect-foot">
+      <div class="plan" id="planCard" hidden></div>
+      <div class="foot-btns">
+        <button class="btn primary" id="btnDryRun" disabled title="⌘D">Dry run</button>
+        <button class="btn primary" id="btnCollect" hidden title="⌘⏎">Collect</button>
+      </div>
+      <div class="hint danger" id="collectError" hidden></div>
+    </div>
+  </aside>
+
+  <footer class="statusbar">
+    <span id="statusLeft">Starting…</span>
+    <span id="statusRight"></span>
+  </footer>
+
+  <div class="sheet-backdrop" id="sheet" hidden>
+    <div class="sheet">
+      <div class="sheet-title" id="sheetTitle"></div>
+      <div class="sheet-body" id="sheetBody"></div>
+      <div class="sheet-actions">
+        <button class="btn" id="sheetCancel">Cancel</button>
+        <button class="btn primary" id="sheetOk">Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+<audio id="audio" preload="metadata"></audio>
+<script src="mock.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
