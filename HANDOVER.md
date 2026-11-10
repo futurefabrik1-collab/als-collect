@@ -51,6 +51,8 @@ access to the app window: do not request it again; test via `app/ui/index.html?m
   Identity + notary profile are Tunefield's (`tunefield-notary`). Minimum macOS is 14 (bundled Python).
 - Experimental Windows build: CI `.github/workflows/build.yml` (dispatch with release_tag=v0.2.0 attaches
   `ALS-Collect-windows-experimental.zip`); MCI audio + GS Wavetable MIDI; untested on a real PC.
+  ATTACHED to v0.2.0 from CI run 42838641893 (main @ 996db65; both suites green on windows-latest + macos-latest).
+  Windows skips: 4 tests whose Live 9 fixture resolves via a Mac alias record, 1 with <>" in a file name.
 
 ## Open items from the reviews (none blocking)
 - Live 9 colours: shown neutral (its palette differs); Live 10 track ColorIndex (v-140)%70 is a
