@@ -367,7 +367,7 @@ class Api:
             self._emit("scan-progress", {"job": jid, "done": done, "total": total, "current": os.path.basename(s)})
             an = self._analysis(s, project_dir)
             row = {"path": s, "name": os.path.splitext(os.path.basename(s))[0],
-                   "rel": os.path.relpath(s, project_dir) if project_dir else os.path.basename(s),
+                   "rel": (os.path.relpath(s, project_dir) if project_dir else os.path.basename(s)).replace(os.sep, "/"),
                    "mtime": os.path.getmtime(s), "size": os.path.getsize(s)}
             if an.error:
                 row["error"] = an.error
@@ -556,7 +556,7 @@ class Api:
             results.append({
                 "project": project_dir, "name": name, "dest": dest, "status": "ok" if not res["errors"] else "errors",
                 "copied": res["copied"], "collected_bytes": res["collected_bytes"], "project_bytes": res["project_bytes"],
-                "copies": [{"source": a, "rel": b, "size": c} for a, b, c in res["copies"]],
+                "copies": [{"source": a, "rel": b.replace(os.sep, "/"), "size": c} for a, b, c in res["copies"]],
                 "missing": sorted(res["missing"]), "ambiguous": [(a, b, h[:8]) for a, b, h in res["ambiguous"]],
                 "skipped": dict(res["skipped"]), "errors": res["errors"], "plugins": sorted(res["plugins"]),
                 "sets": [{"path": s, "changed": ch, "stats": st} for s, _, ch, st in res["sets"]],

@@ -171,7 +171,7 @@ def device_info(dev):
             ref = dev.find("PatchSlot/Value/MxDPatchRef/FileRef")
         if ref is not None:
             fn = _val(ref, "RelativePath") or _val(ref, "Path") or _val(ref, "Name") or ""
-            base = fn.rstrip("/").split("/")[-1]
+            base = _basename(fn)
             if base:
                 name = re.sub(r"\.amxd$", "", base)
     info = {"tag": tag, "name": name, "kind": kind, "user_name": user, "on": on, "plugin": plugin}
@@ -184,7 +184,7 @@ def device_info(dev):
                 nm = _val(b, "Name/EffectiveName") or _val(b, "Name/UserName") or ""
                 if not nm:
                     fr = b.find(".//SampleRef/FileRef")
-                    nm = (_fileref_path(fr) or "").rstrip("/").split("/")[-1] if fr is not None else ""
+                    nm = _basename(_fileref_path(fr) or "") if fr is not None else ""
                 pads.append({"note": 128 - rn, "name": nm})
         info["pads"] = pads
     if kind == "rack":
@@ -197,6 +197,11 @@ def device_info(dev):
                         nested.append(device_info(d))
         info["children"] = nested
     return info
+
+
+def _basename(p):
+    """Last path component; Live writes "/" but tolerate Windows "\\" too."""
+    return re.split(r"[/\\]", (p or "").rstrip("/\\"))[-1]
 
 
 def _flatten(devices):
@@ -255,7 +260,7 @@ def clip_info(clip, scene=None):
         p = _fileref_path(fr)
         info["sample"] = p
         info["sample_rel"] = _fileref_rel(fr)
-        info["sample_name"] = p.rstrip("/").split("/")[-1] if p else None
+        info["sample_name"] = _basename(p) if p else None
         info["warp"] = _val(clip, "WarpMode")
     else:
         info["notes"] = len(_clip_notes(clip))

@@ -919,6 +919,7 @@ class TestApiPreview(ApiBase):
         self.api._preview(9, sets[0])
         self.assertIsNot(self.wait_for("preview-done")["preview"], p)
 
+    @unittest.skipIf(sys.platform == "win32", "the Live 9 fixture resolves through a Mac alias record")
     def test_preview_of_orphan_and_legacy_set(self):
         orphan, loop = self.build_orphan()
         self.api._preview(1, orphan)
@@ -1091,6 +1092,7 @@ class TestApiCollect(ApiBase):
         prog = [p for k, p in self.events if k == "collect-progress"]
         self.assertEqual([p["project"] for p in prog], [proj])
 
+    @unittest.skipIf(sys.platform == "win32", "the Live 9 fixture resolves through a Mac alias record")
     def test_orphan_out_gets_project_folder(self):
         orphan, loop = self.build_orphan()
         items = self.scan_items([orphan])
