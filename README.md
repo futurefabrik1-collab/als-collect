@@ -174,8 +174,11 @@ in a folder called `… (Legacy)` is still found); add more with
   location. If you later move the archive, Live finds the files through the
   relative paths and rewrites the absolute ones on the next save — exactly as
   with a Project Live collected itself.
-* It has not been run against Windows paths; the XML is platform-neutral but
-  the discovery of Live/Packs/User Library folders is macOS-shaped.
+* Windows support is new and untested on a real PC (see *Windows
+  (experimental)* below). The XML is platform-neutral; Live/Packs/User Library
+  discovery has a Windows branch (`%APPDATA%\Ableton\Live *\Preferences\Library.cfg`,
+  `C:\ProgramData\Ableton\Live *\Resources`, `Documents\Ableton`) checked only
+  against the paths inside a Windows-made Set.
 
 ## The app
 
@@ -218,6 +221,22 @@ that it starts in a second. `app/build_app.sh` wraps it into a double-clickable
   collector's log stream into the window; results offer *Reveal* and *Report*.
 * `als_preview.py` is the read-only Set reader behind the preview and works on
   its own too: `python3 als_preview.py SET.als --summary`.
+
+## Windows (experimental)
+
+An **experimental, untested** Windows build is produced by GitHub Actions
+(`.github/workflows/build.yml`, spec `app/als_collect_win.spec`) and attached to
+the release as `ALS-Collect-windows-experimental.zip`. Nobody has run it on a
+real Windows PC yet; the macOS app is the tested one.
+
+* Unzip the folder anywhere and double-click `ALS Collect.exe`. It is not
+  signed, so Windows SmartScreen warns: click **More info → Run anyway**.
+* Needs the Microsoft Edge WebView2 runtime (part of Windows 10/11).
+* Platform differences: *Reveal* opens Explorer, sample formats the WebView
+  cannot play go through Windows MCI, and MIDI clips play through the Microsoft
+  GS Wavetable Synth (MCI sequencer) instead of AVMIDIPlayer.
+* Please report problems as a GitHub issue with what you did, what happened,
+  and your Windows and Live versions.
 
 ## Testing
 

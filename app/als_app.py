@@ -196,12 +196,18 @@ class Api:
 
     def reveal(self, path):
         if path and os.path.exists(path):
-            subprocess.Popen(["open", "-R", path])
+            if sys.platform == "win32":
+                subprocess.Popen(f'explorer /select,"{os.path.normpath(path)}"')
+            else:
+                subprocess.Popen(["open", "-R", path])
         return True
 
     def open_path(self, path):
         if path and os.path.exists(path):
-            subprocess.Popen(["open", path])
+            if sys.platform == "win32":
+                os.startfile(os.path.normpath(path))
+            else:
+                subprocess.Popen(["open", path])
         return True
 
     def cancel(self):
@@ -215,6 +221,15 @@ class Api:
     def play_native(self, path):
         self.stop_native()
         self.stop_midi()
+        if path and os.path.isfile(path) and sys.platform == "win32":   # MCI instead of afplay
+            if getattr(self, "_mci_audio", None) is None:
+                self._mci_audio = midi_render.MciPlayer(on_end=lambda: self._emit("native-ended", {"path": path}),
+                                                        kind="mpegvideo", alias="alscaudio")
+            try:
+                self._mci_audio.play(path)
+                return True
+            except RuntimeError:
+                return False
         if path and os.path.isfile(path):
             self._afplay = subprocess.Popen(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(0.4)
@@ -233,6 +248,8 @@ class Api:
         return False
 
     def stop_native(self):
+        if getattr(self, "_mci_audio", None) is not None:
+            self._mci_audio.stop()
         p = getattr(self, "_afplay", None)
         if p is not None and p.poll() is None:
             p.terminate()
@@ -246,8 +263,8 @@ class Api:
         self.stop_native()
         self.stop_midi()
         try:
-            if not midi_render.GmPlayer.available():
-                return {"error": "The General MIDI player (AVFoundation) is not available."}
+            if not midi_render.player_available():
+                return {"error": "No General MIDI player on this system."}
             key = (set_path, os.path.getmtime(set_path))
             pv = self._preview_cache.get(key)
             with self._preview_lock:          # one big parse at a time
@@ -272,7 +289,7 @@ class Api:
                                          program=g["program"], drums=g["drums"])
             g = {k: v for k, v in g.items() if k != "key_map"}
             if self._midi is None:
-                self._midi = midi_render.GmPlayer(on_end=lambda: self._emit("midi-ended", {}))
+                self._midi = midi_render.make_player(on_end=lambda: self._emit("midi-ended", {}))
             duration = self._midi.play(self._midi.write(data))
             return {**g, "duration": duration, "tempo": pv.get("tempo"),
                     "notes": midi_render.playable_count(m["notes"], m["loop_start"], m["loop_end"]),

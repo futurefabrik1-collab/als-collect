@@ -10,6 +10,7 @@ for whatever Live would have played.  Nothing here touches the Set.
 """
 
 import os
+import sys
 import shutil
 import struct
 import tempfile
@@ -151,3 +152,132 @@ class GmPlayer:
     def close(self):
         self.stop()
         shutil.rmtree(self._dir, ignore_errors=True)
+
+
+# ----------------------------------------------------------------- Windows
+class _Mci:
+    """winmm MCI command strings, all sent from one worker thread (MCI devices
+    belong to the thread that opened them)."""
+
+    def __init__(self):
+        import ctypes
+        import queue
+        self._winmm = ctypes.windll.winmm
+        self._ctypes = ctypes
+        self._q = queue.Queue()
+        threading.Thread(target=self._loop, daemon=True, name="mci").start()
+
+    def _loop(self):
+        while True:
+            cmd, box, done = self._q.get()
+            buf = self._ctypes.create_unicode_buffer(256)
+            box.append((self._winmm.mciSendStringW(cmd, buf, 255, None), buf.value))
+            done.set()
+
+    def send(self, cmd):
+        box, done = [], threading.Event()
+        self._q.put((cmd, box, done))
+        done.wait(10)
+        return box[0] if box else (-1, "")
+
+
+_MCI = None
+
+
+def mci():
+    global _MCI
+    if _MCI is None:
+        _MCI = _Mci()
+    return _MCI
+
+
+class MciPlayer:
+    """Plays one file at a time through MCI: `kind` "sequencer" for .mid (the
+    Microsoft GS Wavetable Synth), "mpegvideo" for audio.  Same surface as
+    GmPlayer; on_end() runs when playback finishes on its own."""
+
+    def __init__(self, on_end=None, kind="sequencer", alias="alscmidi"):
+        self.on_end = on_end
+        self.kind = kind
+        self.alias = alias
+        self._gen = 0
+        self._open = False
+        self._dir = tempfile.mkdtemp(prefix="als-collect-midi-")
+
+    @staticmethod
+    def available():
+        return sys.platform == "win32"
+
+    def write(self, data):
+        path = os.path.join(self._dir, f"clip-{self._gen + 1}.mid")
+        with open(path, "wb") as f:
+            f.write(data)
+        return path
+
+    def play(self, path):
+        self.stop()
+        m = mci()
+        rc, _ = m.send(f'open "{path}" type {self.kind} alias {self.alias}')
+        if rc:
+            raise RuntimeError(f"Windows could not open this file for playback (MCI error {rc})")
+        self._open = True
+        m.send(f"set {self.alias} time format milliseconds")
+        _, length = m.send(f"status {self.alias} length")
+        m.send(f"play {self.alias}")
+        self._gen += 1
+        gen = self._gen
+
+        def watch():
+            import time
+            time.sleep(0.3)
+            while gen == self._gen:
+                _, mode = m.send(f"status {self.alias} mode")
+                if mode != "playing":
+                    break
+                time.sleep(0.2)
+            if gen == self._gen:
+                self._close()
+                if self.on_end:
+                    self.on_end()
+        threading.Thread(target=watch, daemon=True).start()
+        try:
+            return int(length) / 1000.0
+        except ValueError:
+            return 0.0
+
+    def is_playing(self):
+        return self._open and mci().send(f"status {self.alias} mode")[1] == "playing"
+
+    def position(self):
+        if not self._open:
+            return 0.0
+        try:
+            return int(mci().send(f"status {self.alias} position")[1]) / 1000.0
+        except ValueError:
+            return 0.0
+
+    def _close(self):
+        if self._open:
+            self._open = False
+            m = mci()
+            m.send(f"stop {self.alias}")
+            m.send(f"close {self.alias}")
+
+    def stop(self):
+        self._gen += 1
+        self._close()
+
+    def close(self):
+        self.stop()
+        shutil.rmtree(self._dir, ignore_errors=True)
+
+
+def player_available():
+    return GmPlayer.available() or MciPlayer.available()
+
+
+def make_player(on_end=None):
+    """The General MIDI player for this platform."""
+    if sys.platform == "win32":
+        return MciPlayer(on_end=on_end)
+    return GmPlayer(on_end=on_end)

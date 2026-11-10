@@ -38,6 +38,7 @@ from collections import Counter, defaultdict
 
 VERSION = "0.2.0"
 IS_MAC = sys.platform == "darwin"
+IS_WIN = sys.platform == "win32"
 HOME = os.path.expanduser("~")
 PROJECT_INFO = "Ableton Project Info"
 REPORT_NAME = "COLLECT-REPORT.txt"
@@ -142,12 +143,22 @@ def realpath(p):
 
 
 def is_under(path, root):
-    """True if path is root or inside root."""
+    """True if path is root or inside root (case-insensitive on Windows)."""
     if not root or not path:
         return False
-    path = norm(path)
-    root = norm(root)
-    return path == root or path.startswith(root + os.sep)
+    path = os.path.normcase(norm(path))
+    root = os.path.normcase(norm(root))
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def is_abs_ref(p):
+    """An absolute path as Live writes it: /Users/… (macOS) or C:/Users/… (Windows)."""
+    return bool(p) and (p.startswith("/") or re.match(r"^[A-Za-z]:[/\\]", p) is not None)
+
+
+def live_path(p):
+    """A filesystem path in the form Live stores it: forward slashes on both platforms."""
+    return p.replace("\\", "/") if IS_WIN else p
 
 
 def find_project_dir(path):
@@ -224,8 +235,10 @@ class LiveEnv:
         self.live_apps = [p for p in live_apps if os.path.isdir(p)]
         self.packs_by_id = {k: v for k, v in (packs_by_id or {}).items() if os.path.isdir(v)}
         self.packs_by_name = {k: v for k, v in (packs_by_name or {}).items() if os.path.isdir(v)}
-        self.core_library_roots = [p for p in (os.path.join(a, "Contents", "App-Resources", "Core Library") for a in self.live_apps) if os.path.isdir(p)]
-        self.builtin_roots = [p for p in (os.path.join(a, "Contents", "App-Resources", "Builtin") for a in self.live_apps) if os.path.isdir(p)]
+        # macOS: Live.app/Contents/App-Resources/…; Windows: <install>\Resources\…
+        res = ("Resources",) if IS_WIN else ("Contents", "App-Resources")
+        self.core_library_roots = [p for p in (os.path.join(a, *res, "Core Library") for a in self.live_apps) if os.path.isdir(p)]
+        self.builtin_roots = [p for p in (os.path.join(a, *res, "Builtin") for a in self.live_apps) if os.path.isdir(p)]
 
     @property
     def all_pack_dirs(self):
@@ -233,15 +246,22 @@ class LiveEnv:
 
     @classmethod
     def discover(cls, extra_user_library=(), extra_pack_roots=()):
-        user_lib = list(extra_user_library) + [os.path.join(HOME, "Music", "Ableton", "User Library")]
-        packs = list(extra_pack_roots) + [os.path.join(HOME, "Music", "Ableton", "Factory Packs")]
+        # default Library locations: ~/Music/Ableton (macOS), Documents\Ableton (Windows)
+        lib_home = os.path.join(HOME, "Documents", "Ableton") if IS_WIN else os.path.join(HOME, "Music", "Ableton")
+        user_lib = list(extra_user_library) + [os.path.join(lib_home, "User Library")]
+        packs = list(extra_pack_roots) + [os.path.join(lib_home, "Factory Packs")]
         by_id, by_name = {}, {}
         # Live keeps installed-pack paths (and the User Library location) in Library.cfg.
-        cfgs = sorted(glob.glob(os.path.join(HOME, "Library", "Preferences", "Ableton", "Live *", "Library.cfg")),
-                      key=os.path.getmtime)
+        if IS_WIN:
+            appdata = os.environ.get("APPDATA") or os.path.join(HOME, "AppData", "Roaming")
+            cfg_glob = os.path.join(appdata, "Ableton", "Live *", "Preferences", "Library.cfg")
+        else:
+            cfg_glob = os.path.join(HOME, "Library", "Preferences", "Ableton", "Live *", "Library.cfg")
+        cfgs = sorted(glob.glob(cfg_glob), key=os.path.getmtime)
         for cfg in cfgs:   # oldest first, so the newest Live's view wins
             try:
-                text = open(cfg, encoding="utf-8", errors="replace").read()
+                with open(cfg, encoding="utf-8", errors="replace") as fh:
+                    text = fh.read()
             except OSError:
                 continue
             for m in re.finditer(r"<LibrarySliceInfo\b([^>]*)>", text):
@@ -269,8 +289,14 @@ class LiveEnv:
         packs.append(os.path.join(HOME, "Music", "Production Folders", "Factory Packs"))
         user_lib.append(os.path.join(HOME, "Music", "Production Folders", "User Library"))
         apps = []
-        for pattern in ("/Applications/Ableton Live*.app", "/Applications/Live*.app",
-                        os.path.join(HOME, "Applications", "Ableton Live*.app")):
+        if IS_WIN:   # Live's resources: C:\ProgramData\Ableton\Live 12 Suite\Resources (also Program Files installs)
+            bases = [os.environ.get("PROGRAMDATA") or r"C:\ProgramData", os.environ.get("PROGRAMFILES") or r"C:\Program Files",
+                     os.environ.get("PROGRAMFILES(X86)") or r"C:\Program Files (x86)"]
+            patterns = [os.path.join(b, "Ableton", "Live *") for b in bases]
+        else:
+            patterns = ["/Applications/Ableton Live*.app", "/Applications/Live*.app",
+                        os.path.join(HOME, "Applications", "Ableton Live*.app")]
+        for pattern in patterns:
             apps.extend(glob.glob(pattern))
 
         def app_key(p):   # newest release first, betas last
@@ -283,8 +309,9 @@ class LiveEnv:
             seen, out = set(), []
             for p in seq:
                 p = norm(p)
-                if p not in seen:
-                    seen.add(p)
+                k = os.path.normcase(p)
+                if k not in seen:
+                    seen.add(k)
                     out.append(p)
             return out
         return cls(uniq(user_lib), uniq(packs), uniq(apps), by_id, by_name)
@@ -792,7 +819,7 @@ def resolve(dep, set_path, project_dir, env):
         for r in env.builtin_roots:
             add("builtin", os.path.join(r, rel))
     if ref.abs:
-        if ref.abs.startswith("/"):
+        if is_abs_ref(ref.abs):
             add("absolute", ref.abs)
         else:  # odd legacy case: a relative string in <Path>
             add("project", os.path.join(base_project, ref.abs))
@@ -1126,7 +1153,7 @@ def rewrite_ref(doc, ref, new_rel, dest_project_abs):
     else:
         changed |= doc.set_child(ref, "RelativePath", new_rel)
         changed |= doc.set_child(ref, "RelativePathType", RPT_PROJECT)
-        changed |= doc.set_child(ref, "Path", new_abs)
+        changed |= doc.set_child(ref, "Path", live_path(new_abs))
         changed |= doc.set_child(ref, "LivePackName", "")
         changed |= doc.set_child(ref, "LivePackId", "")
     return changed
