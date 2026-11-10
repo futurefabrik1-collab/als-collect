@@ -790,8 +790,9 @@ class TestApiScan(ApiBase):
         self.assertEqual(o["chosen"], [orphan])
         self.assertEqual(o["sets"][0]["rel"], "Sketch.als")
         self.assertEqual(o["sets"][0]["creator"], "Ableton Live 9.7.7")
-        self.assertEqual(o["status"], "external")
-        self.assertEqual(o["external"], 1)
+        if sys.platform != "win32":   # the Live 9 fixture's file is found through a Mac alias record
+            self.assertEqual(o["status"], "external")
+            self.assertEqual(o["external"], 1)
         prog = [p for k, p in self.events if k == "scan-progress"]
         self.assertEqual(len(prog), 3)
         self.assertTrue(all(p["total"] == 3 for p in prog))
