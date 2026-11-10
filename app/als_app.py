@@ -550,7 +550,52 @@ class Api:
                                     "mode": "in_place" if in_place else "out", "out": out})
 
 
+def selftest(target, out_path):
+    """`ALS Collect --selftest <Project folder or .als> <out.json>`: exercise the code
+    paths the signed bundle depends on (scan, preview, media server, General MIDI
+    player) without a window, and write what happened as JSON.  Read-only."""
+    import urllib.request
+    res = {"ok": False, "frozen": bool(getattr(sys, "frozen", False))}
+    api = Api()
+    events = []
+    api._emit = lambda kind, payload=None: events.append((kind, payload))
+    try:
+        api._scan(1, [target])
+        items = next(p for k, p in events if k == "scan-done")["items"]
+        sets = [s["path"] for it in items for s in it["sets"] if not s.get("error")]
+        res["scan"] = {"projects": len(items), "sets": len(sets)}
+        api._preview(2, sets[0])
+        pv = next(p for k, p in events if k == "preview-done")["preview"]
+        res["preview"] = {"set": pv["name"], "tracks": len(pv["tracks"]), "dependencies": len(pv["dependencies"])}
+        url = next((d["media"] for d in pv["dependencies"] if d.get("media")), None)
+        if url:
+            with urllib.request.urlopen(url, timeout=5) as r:
+                res["media"] = {"status": r.status, "bytes": len(r.read(4096))}
+        clip = next(((t["id"], kind, i) for t in pv["tracks"] for kind, lst in (("session", t["session"]), ("arrangement", t["arrangement"]))
+                     for i, c in enumerate(lst) if c["type"] == "midi" and c.get("notes") and not c.get("freeze_media")), None)
+        if clip:
+            r = api.play_midi(sets[0], *clip)
+            time.sleep(0.6)
+            res["midi"] = {k: r.get(k) for k in ("label", "duration", "error")}
+            res["midi"]["playing"] = bool(api._midi and api._midi.is_playing())
+            api.stop_midi()
+        res["ok"] = bool(res.get("preview")) and (not url or res["media"]["status"] in (200, 206)) and \
+            (not clip or (res["midi"]["playing"] and not res["midi"]["error"]))
+    except Exception as e:
+        res["error"] = f"{type(e).__name__}: {e}"
+        res["trace"] = traceback.format_exc()
+    finally:
+        if api._midi is not None:
+            api._midi.close()
+        api.media.stop()
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(res, f, indent=2)
+    return 0 if res["ok"] else 1
+
+
 def main():
+    if len(sys.argv) >= 4 and sys.argv[1] == "--selftest":
+        sys.exit(selftest(sys.argv[2], sys.argv[3]))
     webview.settings["ALLOW_DOWNLOADS"] = False
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     api = Api()

@@ -26,7 +26,7 @@ app = BUNDLE(
         'CFBundleShortVersionString': '0.2.0', 'CFBundleVersion': '2',
         'NSHighResolutionCapable': True,
         'NSRequiresAquaSystemAppearance': False,
-        'LSMinimumSystemVersion': '12.0',
+        'LSMinimumSystemVersion': '14.0',   # bundled Python + extensions are built for macOS 14
         # lets Finder offer "Open with ALS Collect" on .als files; Live stays the default
         'CFBundleDocumentTypes': [{
             'CFBundleTypeName': 'Ableton Live Set', 'CFBundleTypeRole': 'Viewer',
