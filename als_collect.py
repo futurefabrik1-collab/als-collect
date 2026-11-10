@@ -427,7 +427,7 @@ class FileRef:
         if self.legacy:
             return self.name or ""
         src = self.rel or self.abs or ""
-        return src.rstrip("/").split("/")[-1]
+        return re.split(r"[/\\]", src.rstrip("/\\"))[-1]
 
     @property
     def last_known(self):
@@ -606,7 +606,9 @@ class Document:
                     except ValueError:
                         pass
             if hint and ref.name:
-                ref.hint_path = "/" + "/".join(hint + [ref.name])
+                # a Windows hint starts with the drive ("C:"), a macOS one with the root
+                lead = "" if re.match(r"^[A-Za-z]:$", hint[0]) else "/"
+                ref.hint_path = lead + "/".join(hint + [ref.name])
         else:
             ref.rel = self._child_value(ref, "RelativePath")
             ref.abs = self._child_value(ref, "Path")
@@ -1083,7 +1085,7 @@ class Importer:
         self.bytes += size
         self.copied.append((src, rel, size))
         if self.verbose:
-            log(f"    copy {src}\n      -> {rel}", quiet=self.quiet)
+            log(f"    copy {src}\n      -> {rel.replace(os.sep, '/')}", quiet=self.quiet)
         if not self.dry_run:
             dst = os.path.join(self.dest, rel)
             os.makedirs(dst_dir, exist_ok=True)
@@ -1293,7 +1295,7 @@ def collect_project(project_dir, set_paths, dest_project, env, opts, finder=None
     rep.append("")
     rep.append(f"Files collected: {len(importer.copied)} ({human(importer.bytes)})")
     for src, rel, size in importer.copied:
-        rep.append(f"  {rel}  <-  {src}  ({human(size)})")
+        rep.append(f"  {rel.replace(os.sep, '/')}  <-  {src}  ({human(size)})")
     if res["skipped"]:
         rep += ["", "Left where they are (by option):"] + [f"  {c}: {n} reference(s)" for c, n in res["skipped"].items()]
     if res["ambiguous"]:

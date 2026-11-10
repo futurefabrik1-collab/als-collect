@@ -43,6 +43,15 @@ access to the app window: do not request it again; test via `app/ui/index.html?m
 - Mark heard the first version: "mostly good"; after the fix round (15:07): "Sounds right". MIDI feature done. Unverified: AVMIDIPlayer inside the signed .app bundle (source app is
   what's running); take-lane MIDI clips are playable via the API but not drawn, so not clickable.
 
+## Release v0.2.0 (2026-11-10, Mark: "Yes, both" 15:40)
+- https://github.com/futurefabrik1-collab/als-collect/releases/tag/v0.2.0 — `ALS-Collect-0.2.0-arm64.dmg`
+  (Developer ID, hardened runtime, app + DMG notarized and stapled, spctl "Notarized Developer ID"),
+  sha256 28db4b57…add72, tag at 9aff390. /Applications/ALS Collect.app replaced with the notarized build.
+- Re-run: `app/release-macos.sh --selftest "<Project folder>"` (`--no-notarize` for a local-only build).
+  Identity + notary profile are Tunefield's (`tunefield-notary`). Minimum macOS is 14 (bundled Python).
+- Experimental Windows build: CI `.github/workflows/build.yml` (dispatch with release_tag=v0.2.0 attaches
+  `ALS-Collect-windows-experimental.zip`); MCI audio + GS Wavetable MIDI; untested on a real PC.
+
 ## Open items from the reviews (none blocking)
 - Live 9 colours: shown neutral (its palette differs); Live 10 track ColorIndex (v-140)%70 is a
   hypothesis — verify by opening `Escalator 106 Project/Escalator 106.als` read-only in Live 11.

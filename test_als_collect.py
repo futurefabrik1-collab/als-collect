@@ -272,9 +272,10 @@ def make_env(root):
     ul = os.path.join(root, "User Library")
     packs = os.path.join(root, "Factory Packs")
     app = os.path.join(root, "Ableton Live 12 Suite.app")
+    res = ("Resources",) if ac.IS_WIN else ("Contents", "App-Resources")   # Windows install layout
     for d in (ul, packs,
-              os.path.join(app, "Contents", "App-Resources", "Core Library"),
-              os.path.join(app, "Contents", "App-Resources", "Builtin")):
+              os.path.join(app, *res, "Core Library"),
+              os.path.join(app, *res, "Builtin")):
         os.makedirs(d, exist_ok=True)
     return ac.LiveEnv([ul], [packs], [app])
 
@@ -420,6 +421,7 @@ class TestLegacy(Base):
         write_set(set_path, legacy_live_set(clips))
         return proj, set_path, up, alias, hinted
 
+    @unittest.skipIf(ac.IS_WIN, "Mac alias records (<Data>) only ever hold macOS paths")
     def test_legacy_parse_and_resolution(self):
         proj, set_path, up, alias, hinted = self.build()
         an = ac.SetAnalysis(set_path, self.env)
@@ -448,6 +450,7 @@ class TestLegacy(Base):
         self.assertIsNone(ac.parse_alias_posix("zz"))
         self.assertIsNone(ac.parse_alias_posix("00" * 20))
 
+    @unittest.skipIf(ac.IS_WIN, "Mac alias records (<Data>) only ever hold macOS paths")
     def test_legacy_rewrite_after_collect_out(self):
         proj, set_path, up, alias, hinted = self.build()
         out = os.path.join(self.root, "out")
@@ -634,7 +637,7 @@ class TestCollectOut(Base):
         self.assertIn("Collected 2 file(s)", r.stdout)
         xml = read_xml(os.path.join(dest, "Song.als")).decode()
         self.assertEqual(xml.count('<RelativePath Value="Samples/Imported/ext.wav" />'), 2)
-        self.assertEqual(xml.count(f'<Path Value="{os.path.join(dest, "Samples", "Imported", "ext.wav")}" />'), 2)
+        self.assertEqual(xml.count(f'<Path Value="{ac.live_path(os.path.join(dest, "Samples", "Imported", "ext.wav"))}" />'), 2)
         self.assertIn('<RelativePath Value="Samples/Imported/ul.wav" />', xml)
         self.assertNotIn('<RelativePathType Value="6" />', xml)
         self.assertNotIn('<RelativePathType Value="0" />', xml)
@@ -696,7 +699,7 @@ class TestInPlace(Base):
         xml = read_xml(set_path).decode()
         self.assertIn('<RelativePathType Value="3" />', xml)
         self.assertIn('<RelativePath Value="Samples/Imported/ext.wav" />', xml)
-        self.assertIn(f'<Path Value="{os.path.join(proj, "Samples", "Imported", "ext.wav")}" />', xml)
+        self.assertIn(f'<Path Value="{ac.live_path(os.path.join(proj, "Samples", "Imported", "ext.wav"))}" />', xml)
         self.assertEqual(run_cli(["verify", proj], self.env).returncode, 0)
         # second run: nothing copied, nothing rewritten, no new backup
         time.sleep(1.1)   # make sure a new backup would get a different stamp
@@ -892,6 +895,7 @@ class TestDocumentFidelity(Base):
         with self.assertRaises(ValueError):
             ac.Document("x", "\n".join(lines).encode())
 
+    @unittest.skipIf(ac.IS_WIN, "uses < > \" in a file name, which Windows forbids")
     def test_escaping_roundtrip(self):
         proj = make_project(self.root, "Esc Project")
         set_path = os.path.join(proj, "Esc.als")
